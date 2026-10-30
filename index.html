@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pirul2Product | Smart Micro-Hub Terminal</title>
+    <!-- Tailwind CSS for Styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Leaflet.js for Interactive High-Res Satellite Map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- TensorFlow.js & Google Teachable Machine Image Library -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+
+    <style>
+        #map { height: 520px; width: 100%; border-radius: 0.75rem; z-index: 10; }
+        .laser-line {
+            position: absolute;
+            width: 100%;
+            height: 3px;
+            background: #22c55e;
+            box-shadow: 0 0 12px 3px #22c55e;
+            animation: scan 2s infinite ease-in-out;
+            display: none;
+        }
+        @keyframes scan {
+            0% { top: 5%; }
+            50% { top: 92%; }
+            100% { top: 5%; }
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans">
+
+    <!-- Top Navigation Bar -->
+    <header class="bg-slate-900 border-b border-slate-800 px-6 py-4 flex flex-wrap justify-between items-center gap-4">
+        <div class="flex items-center gap-3">
+            <span class="text-3xl">🌲</span>
+            <div>
+                <h1 class="text-xl font-bold text-emerald-400 tracking-wide">Pirul2Product HubOS v1.0</h1>
+                <p class="text-xs text-slate-400">Bhimtal Micro-Hub #01 | Kumaon Bio-Energy Network</p>
+            </div>
+        </div>
+
+        <!-- Teachable Machine Cloud Model Connector -->
+        <div class="flex items-center gap-2 bg-slate-800 p-1.5 rounded-lg border border-slate-700">
+            <input id="tm-model-url" type="text" placeholder="Paste Teachable Machine Link (Optional)" 
+                class="bg-slate-900 text-xs px-3 py-2 rounded border border-slate-700 w-64 text-slate-200 focus:outline-none focus:border-emerald-500">
+            <button onclick="connectTeachableMachine()" id="connect-btn"
+                class="bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold px-3 py-2 rounded transition">
+                Connect Real AI
+            </button>
+        </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <div class="max-w-7xl mx-auto px-6 pt-5">
+        <div class="flex gap-3 border-b border-slate-800 pb-3">
+            <button onclick="switchTab('scanner')" id="tab-scanner" class="px-4 py-2 rounded-lg text-sm font-semibold bg-emerald-600 text-white">
+                1. AI Quality Scanner & UPI Payout
+            </button>
+            <button onclick="switchTab('map')" id="tab-map" class="px-4 py-2 rounded-lg text-sm font-semibold bg-slate-800 text-slate-300 hover:bg-slate-700">
+                2. High-Res Bhimtal Fire-Risk GIS Map
+            </button>
+            <button onclick="switchTab('ledger')" id="tab-ledger" class="px-4 py-2 rounded-lg text-sm font-semibold bg-slate-800 text-slate-300 hover:bg-slate-700">
+                3. Villager Payout Ledger (CSV)
+            </button>
+        </div>
+    </div>
+
+    <!-- MAIN CONTENT CONTAINER -->
+    <main class="max-w-7xl mx-auto p-6">
+
+        <!-- ================= TAB 1: AI SCANNER & UPI PAYOUT ================= -->
+        <section id="view-scanner" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <!-- Column 1: Collector & Bluetooth Scale -->
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
+                <h2 class="text-base font-bold text-emerald-400 border-b border-slate-800 pb-2">
+                    Step 1: Collector & Weighing
+                </h2>
+
+                <div>
+                    <label class="text-xs text-slate-400">Select Registered Village Collector</label>
+                    <select id="collector-select" onchange="fillCollector()" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm">
+                        <option value="Ramesh Singh|ramesh.kumaon@sbi|+91 94120 55102|Mehragaon">Ramesh Singh (Mehragaon)</option>
+                        <option value="Kamla Devi|kamla.shg@okaxis|+91 94111 88341|Sattal Belt">Kamla Devi (Sattal SHG)</option>
+                        <option value="Kishan Negi|kishan.negi@ybl|+91 98970 11290|Naukuchiatal">Kishan Negi (Naukuchiatal)</option>
+                    </select>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-xs text-slate-400">Linked UPI ID</label>
+                        <input id="upi-id" type="text" value="ramesh.kumaon@sbi" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-emerald-300 font-mono">
+                    </div>
+                    <div>
+                        <label class="text-xs text-slate-400">Village Zone</label>
+                        <input id="village-zone" type="text" value="Mehragaon" readonly class="w-full mt-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-300">
+                    </div>
+                </div>
+
+                <div class="bg-slate-950 p-4 rounded-xl border border-slate-800">
+                    <div class="flex justify-between items-center">
+                        <span class="text-xs text-slate-400">Bluetooth Hanging Scale</span>
+                        <span class="text-xs bg-blue-900/60 text-blue-300 px-2 py-0.5 rounded-full">BT-SCALE CONNECTED</span>
+                    </div>
+                    <div class="flex items-baseline gap-3 mt-2">
+                        <input id="sack-weight" type="number" value="25.0" step="0.5" oninput="recalculatePayout()"
+                            class="bg-transparent text-3xl font-bold text-white w-28 focus:outline-none border-b border-slate-700">
+                        <span class="text-lg text-slate-400">Kg</span>
+                        <button onclick="simulateBluetoothWeight()" class="ml-auto text-xs bg-slate-800 hover:bg-slate-700 px-2.5 py-1.5 rounded border border-slate-700">
+                            Sync Weight
+                        </button>
+                    </div>
+                </div>
+
+                <div class="text-xs text-slate-400 space-y-1 pt-2 border-t border-slate-800">
+                    <div class="flex justify-between"><span>Base Procurement Rate:</span><span class="text-slate-200 font-semibold">₹ 3.00 / Kg</span></div>
+                    <div class="flex justify-between"><span>High-Risk Zone Bonus:</span><span class="text-emerald-400 font-semibold">+ ₹ 0.20 / Kg</span></div>
+                </div>
+            </div>
+
+            <!-- Column 2: Live Webcam & Optical AI Scanner -->
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 flex flex-col justify-between space-y-4">
+                <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+                    <h2 class="text-base font-bold text-emerald-400">Step 2: Edge CV Quality Scan</h2>
+                    <span id="ai-mode-badge" class="text-xs bg-amber-900/50 text-amber-300 px-2 py-0.5 rounded">Mode: Preset / Webcam</span>
+                </div>
+
+                <!-- Camera Viewport -->
+                <div class="relative bg-black rounded-xl overflow-hidden h-64 flex items-center justify-center border border-slate-800">
+                    <video id="webcam-video" autoplay playsinline muted class="w-full h-full object-cover hidden"></video>
+                    <div id="tm-webcam-container" class="w-full h-full flex items-center justify-center hidden"></div>
+                    <div id="camera-placeholder" class="text-center p-4">
+                        <p class="text-3xl mb-2">📷</p>
+                        <p class="text-xs text-slate-400">Place Pirul tray under camera to detect stones, soil & moisture</p>
+                    </div>
+                    <div id="laser" class="laser-line"></div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="startNormalWebcam()" class="bg-slate-800 hover:bg-slate-700 text-xs font-semibold py-2.5 rounded-lg border border-slate-700">
+                        Start Live Webcam
+                    </button>
+                    <button onclick="triggerLaserScan()" class="bg-emerald-700 hover:bg-emerald-600 text-xs font-semibold py-2.5 rounded-lg">
+                        Run AI Laser Scan
+                    </button>
+                </div>
+
+                <!-- Demo Backup Overrides for Pitch Reliability -->
+                <div class="pt-2 border-t border-slate-800">
+                    <p class="text-[11px] text-slate-400 mb-1.5">1-Click Stage Presets (Or use live Teachable Machine):</p>
+                    <div class="grid grid-cols-3 gap-2">
+                        <button onclick="applyScanResult('pure', 95)" class="bg-emerald-950 hover:bg-emerald-900 border border-emerald-700 text-emerald-300 text-xs py-1.5 rounded">
+                            Pure (95%)
+                        </button>
+                        <button onclick="applyScanResult('stones', 58)" class="bg-red-950 hover:bg-red-900 border border-red-700 text-red-300 text-xs py-1.5 rounded">
+                            Stones (58%)
+                        </button>
+                        <button onclick="applyScanResult('wet', 64)" class="bg-amber-950 hover:bg-amber-900 border border-amber-700 text-amber-300 text-xs py-1.5 rounded">
+                            Wet (64%)
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Column 3: Quality Verdict & Instant UPI Disbursal -->
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 flex flex-col justify-between space-y-4">
+                <h2 class="text-base font-bold text-emerald-400 border-b border-slate-800 pb-2">
+                    Step 3: AI Audit & Instant UPI
+                </h2>
+
+                <div id="status-card" class="bg-emerald-950/50 border border-emerald-700/70 rounded-xl p-4 space-y-2">
+                    <div class="flex justify-between items-center">
+                        <span id="verdict-badge" class="text-xs font-bold bg-emerald-600 text-white px-2.5 py-0.5 rounded">BATCH APPROVED</span>
+                        <span id="moisture-text" class="text-xs text-slate-300">Moisture: 9.8%</span>
+                    </div>
+                    <p id="classification-title" class="text-lg font-bold text-white">Pure Dry Pirul Needles</p>
+                    <div class="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden">
+                        <div id="purity-bar" class="bg-emerald-500 h-full transition-all duration-300" style="width: 95%"></div>
+                    </div>
+                    <div class="flex justify-between text-xs text-slate-300">
+                        <span>AI Purity Confidence:</span>
+                        <span id="purity-score-label" class="font-bold text-emerald-400">95%</span>
+                    </div>
+                </div>
+
+                <!-- Payout Box -->
+                <div class="bg-slate-950 border border-slate-800 rounded-xl p-4">
+                    <span class="text-xs text-slate-400">Net Instant Collector Payout</span>
+                    <div class="flex items-baseline justify-between mt-1">
+                        <span id="payout-amount" class="text-4xl font-extrabold text-emerald-400">₹ 76.00</span>
+                        <span class="text-xs text-slate-400 font-mono">Weight × Purity × ₹3.20</span>
+                    </div>
+                </div>
+
+                <button id="pay-btn" onclick="processUPIPayment()" 
+                    class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 rounded-xl shadow-lg transition flex items-center justify-center gap-2">
+                    <span>⚡ Approve & Send Instant UPI</span>
+                </button>
+            </div>
+        </section>
+
+        <!-- ================= TAB 2: HIGH-RES BHIMTAL SATELLITE MAP ================= -->
+        <section id="view-map" class="hidden space-y-4">
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-wrap justify-between items-center gap-4">
+                <div>
+                    <h2 class="text-lg font-bold text-emerald-400">Bhimtal / Kumaon High-Resolution Fire-Risk & Pirul Density Map</h2>
+                    <p class="text-xs text-slate-400">Esri World Satellite Imagery overlaid with Sentinel-2 Dry Biomass Polygons (Click any zone to alert villagers)</p>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="focusZone(29.361, 79.554)" class="text-xs bg-red-900/60 border border-red-600 px-3 py-1.5 rounded-lg text-red-200">
+                        Zone A: Mehragaon Slope (Critical)
+                    </button>
+                    <button onclick="focusZone(29.348, 79.532)" class="text-xs bg-amber-900/60 border border-amber-600 px-3 py-1.5 rounded-lg text-amber-200">
+                        Zone B: Sattal Pine Belt (High)
+                    </button>
+                    <button onclick="focusZone(29.322, 79.578)" class="text-xs bg-emerald-900/60 border border-emerald-600 px-3 py-1.5 rounded-lg text-emerald-200">
+                        Zone C: Naukuchiatal (Cleared)
+                    </button>
+                </div>
+            </div>
+
+            <div id="map" class="border border-slate-800 shadow-xl"></div>
+        </section>
+
+        <!-- ================= TAB 3: PAYOUT LEDGER & CSV EXPORT ================= -->
+        <section id="view-ledger" class="hidden bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h2 class="text-lg font-bold text-emerald-400">Micro-Hub #01 Disbursal Ledger</h2>
+                    <p class="text-xs text-slate-400">Stored persistently in browser database</p>
+                </div>
+                <button onclick="exportCSV()" class="bg-emerald-600 hover:bg-emerald-500 text-xs font-bold px-4 py-2 rounded-lg">
+                    ⬇ Export Excel CSV
+                </button>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm border-collapse">
+                    <thead>
+                        <tr class="border-b border-slate-800 text-slate-400 text-xs">
+                            <th class="py-3 px-3">Timestamp</th>
+                            <th class="py-3 px-3">Collector</th>
+                            <th class="py-3 px-3">Village Zone</th>
+                            <th class="py-3 px-3">Weight (Kg)</th>
+                            <th class="py-3 px-3">AI Purity</th>
+                            <th class="py-3 px-3">UPI Paid</th>
+                            <th class="py-3 px-3">UTR Ref</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ledger-body" class="divide-y divide-slate-800 text-xs"></tbody>
+                </table>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- UPI RECEIPT MODAL POPUP -->
+    <!-- REAL NPCI UPI QR & DEEP-LINK MODAL -->
+<div id="upi-modal" class="fixed inset-0 bg-black/80 hidden items-center justify-center z-50 p-4">
+    <div class="bg-slate-900 border border-emerald-500 rounded-2xl max-w-md w-full p-6 space-y-4 text-center shadow-2xl">
+        <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+            <span class="text-xs font-bold bg-emerald-600/30 text-emerald-300 px-2.5 py-1 rounded">NPCI UPI LIVE GATEWAY</span>
+            <span id="modal-utr" class="text-xs font-mono text-slate-400">UTR630918442</span>
+        </div>
+
+        <h3 class="text-lg font-bold text-white">Scan with GPay / PhonePe or Tap Below</h3>
+        <p id="modal-amount" class="text-3xl font-extrabold text-emerald-400">₹ 76.00</p>
+
+        <!-- Dynamic Real Scannable UPI QR Code -->
+        <div class="bg-white p-3 rounded-xl w-44 h-44 mx-auto flex items-center justify-center shadow-inner">
+            <img id="upi-qr-img" src="" alt="Scan UPI QR" class="w-full h-full object-contain" />
+        </div>
+        <p class="text-[11px] text-slate-400">Scan this QR with any UPI app—it pre-fills the exact amount & collector VPA!</p>
+
+        <div class="bg-slate-950 p-3 rounded-lg text-xs text-left space-y-1 border border-slate-800">
+            <div class="flex justify-between"><span class="text-slate-400">Payee Name:</span><span id="modal-name" class="font-semibold text-white">Ramesh Singh</span></div>
+            <div class="flex justify-between"><span class="text-slate-400">Payee UPI ID:</span><span id="modal-upi" class="font-mono text-emerald-300">ramesh.kumaon@sbi</span></div>
+        </div>
+
+        <!-- Direct UPI Deep-Link Button (Opens GPay/PhonePe on Mobile) -->
+        <a id="upi-deeplink-btn" href="#" 
+            class="block w-full bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold py-2.5 rounded-xl transition">
+            📲 Open GPay / PhonePe / Paytm Directly (On Mobile)
+        </a>
+
+        <button onclick="closeModal()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold py-2.5 rounded-xl">
+            ✓ Confirm Payment & Log to Ledger
+        </button>
+    </div>
+</div>
+
+    <script>
+        let currentPurity = 95;
+        let currentStatus = 'pure';
+        let mapInstance = null;
+        let tmModel = null;
+        let tmWebcam = null;
+
+        // Default Ledger Entries
+        let transactions = JSON.parse(localStorage.getItem('pirul_ledger')) || [
+            { time: '30 Oct, 10:15 AM', name: 'Kamla Devi', zone: 'Sattal Belt', weight: '32.0', purity: '96%', amount: '₹ 98.30', utr: 'UTR99201823' },
+            { time: '30 Oct, 11:40 AM', name: 'Kishan Negi', zone: 'Naukuchiatal', weight: '20.5', purity: '92%', amount: '₹ 60.35', utr: 'UTR99204419' }
+        ];
+
+        // Switch Navigation Tabs
+        function switchTab(tab) {
+            ['scanner', 'map', 'ledger'].forEach(t => {
+                document.getElementById('view-' + t).classList.add('hidden');
+                document.getElementById('tab-' + t).className = "px-4 py-2 rounded-lg text-sm font-semibold bg-slate-800 text-slate-300 hover:bg-slate-700";
+            });
+            document.getElementById('view-' + tab).classList.remove('hidden');
+            document.getElementById('tab-' + tab).className = "px-4 py-2 rounded-lg text-sm font-semibold bg-emerald-600 text-white";
+
+            if (tab === 'map') initSatelliteMap();
+            if (tab === 'ledger') renderLedger();
+        }
+
+        // Fill Collector Info
+        function fillCollector() {
+            const raw = document.getElementById('collector-select').value.split('|');
+            document.getElementById('upi-id').value = raw[1];
+            document.getElementById('village-zone').value = raw[3];
+        }
+
+        // Simulate Bluetooth Weight Sync
+        function simulateBluetoothWeight() {
+            const randomWeight = (Math.floor(Math.random() * 45) + 15) + 0.5;
+            document.getElementById('sack-weight').value = randomWeight.toFixed(1);
+            recalculatePayout();
+        }
+
+        // Start Standard Browser Webcam
+        async function startNormalWebcam() {
+            const video = document.getElementById('webcam-video');
+            const placeholder = document.getElementById('camera-placeholder');
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+                video.classList.remove('hidden');
+                placeholder.classList.add('hidden');
+            } catch (err) {
+                alert("Camera permission needed! Run this file via VS Code Live Server or allow webcam access in browser.");
+            }
+        }
+
+        // Connect Real Google Teachable Machine Model URL
+        async function connectTeachableMachine() {
+            let baseUrl = document.getElementById('tm-model-url').value.trim();
+            if (!baseUrl) return alert("Paste your Teachable Machine Shareable Link first!");
+            if (!baseUrl.endsWith('/')) baseUrl += '/';
+
+            document.getElementById('connect-btn').innerText = "Loading AI...";
+            try {
+                tmModel = await tmImage.load(baseUrl + "model.json", baseUrl + "metadata.json");
+                tmWebcam = new tmImage.Webcam(320, 256, true);
+                await tmWebcam.setup();
+                await tmWebcam.play();
+
+                document.getElementById('camera-placeholder').classList.add('hidden');
+                document.getElementById('webcam-video').classList.add('hidden');
+                const container = document.getElementById('tm-webcam-container');
+                container.innerHTML = '';
+                container.appendChild(tmWebcam.canvas);
+                container.classList.remove('hidden');
+
+                document.getElementById('ai-mode-badge').innerText = "Mode: LIVE TEACHABLE MACHINE";
+                document.getElementById('connect-btn').innerText = "AI Connected ✓";
+                window.requestAnimationFrame(loopTeachableMachine);
+            } catch (e) {
+                alert("Could not load Teachable Machine URL. Make sure it is a valid exported cloud link.");
+                document.getElementById('connect-btn').innerText = "Connect Real AI";
+            }
+        }
+
+        async function loopTeachableMachine() {
+            tmWebcam.update();
+            const prediction = await tmModel.predict(tmWebcam.canvas);
+            let top = prediction.reduce((prev, curr) => (prev.probability > curr.probability) ? prev : curr);
+            const conf = Math.round(top.probability * 100);
+            
+            if (top.className.toLowerCase().includes('pure')) {
+                applyScanResult('pure', conf);
+            } else if (top.className.toLowerCase().includes('stone') || top.className.toLowerCase().includes('dirt')) {
+                applyScanResult('stones', conf);
+            } else {
+                applyScanResult('wet', conf);
+            }
+            window.requestAnimationFrame(loopTeachableMachine);
+        }
+
+        // Laser Scan Animation
+        function triggerLaserScan() {
+            const laser = document.getElementById('laser');
+            laser.style.display = 'block';
+            setTimeout(() => { laser.style.display = 'none'; }, 2200);
+        }
+
+        // Update Scan Verdict & UI
+        function applyScanResult(type, score) {
+            currentStatus = type;
+            currentPurity = score;
+            const card = document.getElementById('status-card');
+            const badge = document.getElementById('verdict-badge');
+            const title = document.getElementById('classification-title');
+            const bar = document.getElementById('purity-bar');
+            const scoreLabel = document.getElementById('purity-score-label');
+            const moisture = document.getElementById('moisture-text');
+            const payBtn = document.getElementById('pay-btn');
+
+            scoreLabel.innerText = score + "%";
+            bar.style.width = score + "%";
+
+            if (type === 'pure') {
+                card.className = "bg-emerald-950/50 border border-emerald-700/70 rounded-xl p-4 space-y-2";
+                badge.className = "text-xs font-bold bg-emerald-600 text-white px-2.5 py-0.5 rounded";
+                badge.innerText = "BATCH APPROVED";
+                title.innerText = "Pure Dry Pirul Needles";
+                bar.className = "bg-emerald-500 h-full transition-all duration-300";
+                moisture.innerText = "Moisture: 9.8% (Optimal)";
+                payBtn.disabled = false;
+                payBtn.className = "w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 rounded-xl shadow-lg transition";
+                payBtn.innerText = "⚡ Approve & Send Instant UPI";
+            } else if (type === 'stones') {
+                card.className = "bg-red-950/50 border border-red-700/70 rounded-xl p-4 space-y-2";
+                badge.className = "text-xs font-bold bg-red-600 text-white px-2.5 py-0.5 rounded";
+                badge.innerText = "REJECTED: ADULTERATED";
+                title.innerText = "Stones & Soil Detected (>15%)";
+                bar.className = "bg-red-500 h-full transition-all duration-300";
+                moisture.innerText = "Machine Hazard Flagged";
+                payBtn.disabled = true;
+                payBtn.className = "w-full bg-slate-800 text-slate-500 font-bold py-3.5 rounded-xl cursor-not-allowed";
+                payBtn.innerText = "❌ Sieve Stones to Unlock Payout";
+            } else {
+                card.className = "bg-amber-950/50 border border-amber-700/70 rounded-xl p-4 space-y-2";
+                badge.className = "text-xs font-bold bg-amber-600 text-white px-2.5 py-0.5 rounded";
+                badge.innerText = "REJECTED: HIGH MOISTURE";
+                title.innerText = "Wet / Green Needles Detected";
+                bar.className = "bg-amber-500 h-full transition-all duration-300";
+                moisture.innerText = "Moisture: 28.4% (Too Wet)";
+                payBtn.disabled = true;
+                payBtn.className = "w-full bg-slate-800 text-slate-500 font-bold py-3.5 rounded-xl cursor-not-allowed";
+                payBtn.innerText = "❌ Sun-Dry Before Briquetting";
+            }
+            recalculatePayout();
+        }
+
+        function recalculatePayout() {
+            const weight = parseFloat(document.getElementById('sack-weight').value) || 0;
+            if (currentStatus !== 'pure') {
+                document.getElementById('payout-amount').innerText = "₹ 0.00";
+                return;
+            }
+            const rate = 3.20;
+            const total = (weight * (currentPurity / 100) * rate).toFixed(2);
+            document.getElementById('payout-amount').innerText = "₹ " + total;
+        }
+
+        // Trigger UPI Modal & Save to Ledger
+        function processUPIPayment() {
+    const raw = document.getElementById('collector-select').value.split('|');
+    const name = raw[0];
+    const upi = document.getElementById('upi-id').value.trim(); // Tip: Put your teammate's real UPI ID here!
+    const zone = document.getElementById('village-zone').value;
+    const weight = document.getElementById('sack-weight').value;
+    const amountText = document.getElementById('payout-amount').innerText;
+    const numericAmount = amountText.replace('₹', '').trim();
+    const utr = "UTR" + Math.floor(100000000 + Math.random() * 900000000);
+
+    // Construct official NPCI UPI Deep-Link URI
+    const upiUri = `upi://pay?pa=${encodeURIComponent(upi)}&pn=${encodeURIComponent(name)}&am=${encodeURIComponent(numericAmount)}&cu=INR&tn=${encodeURIComponent('Pirul2Product BioFuel Payout')}`;
+
+    // Generate live scannable QR code image from the NPCI URI
+    const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(upiUri)}`;
+
+    document.getElementById('modal-name').innerText = name;
+    document.getElementById('modal-upi').innerText = upi;
+    document.getElementById('modal-amount').innerText = amountText;
+    document.getElementById('modal-utr').innerText = utr;
+    document.getElementById('upi-qr-img').src = qrApiUrl;
+    document.getElementById('upi-deeplink-btn').href = upiUri;
+
+    document.getElementById('upi-modal').classList.remove('hidden');
+    document.getElementById('upi-modal').classList.add('flex');
+
+    transactions.unshift({
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        name, zone, weight, purity: currentPurity + '%', amount: amountText, utr
+    });
+    localStorage.setItem('pirul_ledger', JSON.stringify(transactions));
+}
+
+        function closeModal() {
+            document.getElementById('upi-modal').classList.add('hidden');
+            document.getElementById('upi-modal').classList.remove('flex');
+        }
+
+        // Initialize Crystal-Clear Esri World Imagery Satellite Map of Bhimtal
+        function initSatelliteMap() {
+            if (mapInstance) {
+                setTimeout(() => mapInstance.invalidateSize(), 200);
+                return;
+            }
+            mapInstance = L.map('map').setView([29.354, 79.556], 14);
+
+            // High-Resolution Esri Satellite Base Layer
+            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                attribution: 'Tiles &copy; Esri — Source: Esri, Maxar, Earthstar Geographics, Sentinel-2'
+            }).addTo(mapInstance);
+
+            // Zone A: Mehragaon Critical Dry Pirul Polygon
+            const zoneA = L.polygon([
+                [29.365, 79.548], [29.368, 79.561], [29.357, 79.563], [29.355, 79.550]
+            ], { color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.45 }).addTo(mapInstance);
+            zoneA.bindPopup(`
+                <b>🔥 Zone A: Mehragaon Pine Ridge</b><br>
+                Sentinel-2 Dryness Index: <b>89% (Critical)</b><br>
+                Est. Fallen Pirul: <b>14.5 Tons</b><br>
+                Incentive Rate: <b>₹3.20 / Kg</b><br>
+                <button onclick="alert('WhatsApp Alert Dispatched to 28 Registered Collectors in Mehragaon!')" 
+                    style="margin-top:6px;background:#16a34a;color:white;padding:4px 8px;border-radius:4px;border:none;cursor:pointer;">
+                    📲 Dispatch Collector WhatsApp Alert
+                </button>
+            `).openPopup();
+
+            // Zone B: Sattal Forest Belt
+            const zoneB = L.polygon([
+                [29.352, 79.525], [29.355, 79.539], [29.343, 79.540], [29.341, 79.527]
+            ], { color: '#f59e0b', fillColor: '#f59e0b', fillOpacity: 0.4 }).addTo(mapInstance);
+            zoneB.bindPopup(`<b>⚠️ Zone B: Sattal Pine Belt</b><br>Dryness Index: 74% (High)<br>Rate: ₹3.00 / Kg`);
+
+            // Zone C: Naukuchiatal Cleared Slope
+            const zoneC = L.polygon([
+                [29.326, 79.572], [29.328, 79.585], [29.318, 79.586], [29.317, 79.574]
+            ], { color: '#10b981', fillColor: '#10b981', fillOpacity: 0.35 }).addTo(mapInstance);
+            zoneC.bindPopup(`<b>✅ Zone C: Naukuchiatal Slope</b><br>Status: Cleared by SHG Collectors (Safe)`);
+        }
+
+        function focusZone(lat, lng) {
+            if (mapInstance) mapInstance.flyTo([lat, lng], 15);
+        }
+
+        // Render Ledger Table & Export CSV
+        function renderLedger() {
+            const tbody = document.getElementById('ledger-body');
+            tbody.innerHTML = transactions.map(t => `
+                <tr class="hover:bg-slate-800/50">
+                    <td class="py-2.5 px-3 text-slate-400">${t.time}</td>
+                    <td class="py-2.5 px-3 font-semibold text-white">${t.name}</td>
+                    <td class="py-2.5 px-3">${t.zone}</td>
+                    <td class="py-2.5 px-3 font-mono">${t.weight} Kg</td>
+                    <td class="py-2.5 px-3 text-emerald-400 font-bold">${t.purity}</td>
+                    <td class="py-2.5 px-3 text-emerald-300 font-bold">${t.amount}</td>
+                    <td class="py-2.5 px-3 font-mono text-slate-400">${t.utr}</td>
+                </tr>
+            `).join('');
+        }
+
+        function exportCSV() {
+            let csv = "Timestamp,Collector Name,Village Zone,Weight (Kg),AI Purity,Payout,UTR Reference\n";
+            transactions.forEach(t => {
+                csv += `"${t.time}","${t.name}","${t.zone}","${t.weight}","${t.purity}","${t.amount}","${t.utr}"\n`;
+            });
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'Pirul2Product_Bhimtal_Hub_Ledger.csv';
+            a.click();
+        }
+
+        renderLedger();
+    </script>
+</body>
+</html>
